@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { InternalInvariantError, MalformedInputError } from "../src/errors.js";
-import { AnthropicStreamEncoder, __resetIdCounterForTests } from "../src/stream.js";
+import { __resetIdCounterForTests, AnthropicStreamEncoder } from "../src/stream.js";
 import type { AnthropicStreamEvent, OpenAIChatCompletionChunk } from "../src/types.js";
 
 beforeEach(() => {
