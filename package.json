@@ -1,0 +1,88 @@
+{
+  "name": "@jtabet/anthropic-openai-bridge",
+  "version": "0.1.0",
+  "description": "Anthropic ↔ OpenAI API format translation. Use Claude Code with any OpenAI-compatible backend. Pure functions, framework-agnostic, zero runtime deps.",
+  "keywords": [
+    "anthropic",
+    "openai",
+    "claude",
+    "claude-code",
+    "messages-api",
+    "chat-completions",
+    "proxy",
+    "translation",
+    "sse",
+    "streaming",
+    "llm"
+  ],
+  "author": "Jérémie Tabet <dev@jeremietabet.com>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/jtabet/anthropic-openai-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/jtabet/anthropic-openai-bridge/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtabet/anthropic-openai-bridge.git"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "verify": "bun run lint && bun run typecheck && bun run test && bun run build",
+    "prepublishOnly": "bun run verify",
+    "changeset": "changeset",
+    "release": "changeset publish"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.30.0",
+    "openai": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.27.11",
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.8",
+    "fast-check": "^3.23.2",
+    "openai": "^4.77.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "trustedDependencies": ["@biomejs/biome"]
+}
