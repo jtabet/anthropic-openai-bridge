@@ -1,0 +1,19 @@
+@jtabet/anthropic-openai-bridge
+Copyright 2026 Jérémie Tabet
+
+Licensed under the Apache License, Version 2.0 (the "License").
+See LICENSE for details.
+
+---
+
+This product includes design and implementation insights informed by:
+
+  anthropic-proxy (https://github.com/maxnowack/anthropic-proxy)
+  Copyright (c) Max Nowack
+  Licensed under the MIT License
+
+  The streaming state machine in src/stream.ts follows the same overall
+  approach (tool-call JSON accumulation, content-block lifecycle tracking,
+  finish_reason → stop_reason mapping). No code was copied verbatim; the
+  implementation here is independent and adapted to TypeScript with strict
+  typing and an exposed library API.
