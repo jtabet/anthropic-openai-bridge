@@ -6,13 +6,6 @@
  * prevent accidental expansion.
  */
 
-export { anthropicToOpenAIRequest } from "./request.js";
-export { openAIToAnthropicResponse } from "./response.js";
-export {
-  AnthropicStreamEncoder,
-  type AnthropicStreamEncoderOptions,
-} from "./stream.js";
-export { frameEvent } from "./sse.js";
 export {
   BridgeError,
   InternalInvariantError,
@@ -25,6 +18,13 @@ export type {
   OpenAIFinishReason,
   OpenAIToolChoice,
 } from "./mappings.js";
+export { anthropicToOpenAIRequest } from "./request.js";
+export { openAIToAnthropicResponse } from "./response.js";
+export { frameEvent } from "./sse.js";
+export {
+  AnthropicStreamEncoder,
+  type AnthropicStreamEncoderOptions,
+} from "./stream.js";
 export type {
   AnthropicContentBlock,
   AnthropicImageBlock,

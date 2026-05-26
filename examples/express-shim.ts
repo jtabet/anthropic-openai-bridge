@@ -9,10 +9,10 @@
 
 import {
   AnthropicStreamEncoder,
-  MalformedInputError,
-  UnsupportedFeatureError,
   anthropicToOpenAIRequest,
+  MalformedInputError,
   openAIToAnthropicResponse,
+  UnsupportedFeatureError,
 } from "@jtabet/anthropic-openai-bridge";
 import express, { type Request, type Response } from "express";
 
