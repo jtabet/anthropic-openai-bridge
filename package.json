@@ -37,7 +37,12 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
   "sideEffects": false,
   "engines": {
     "node": ">=20"
@@ -57,8 +62,8 @@
     "release": "changeset publish"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.30.0",
-    "openai": ">=4.0.0"
+    "@anthropic-ai/sdk": ">=0.98.0",
+    "openai": ">=6.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
@@ -69,20 +74,22 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@biomejs/biome": "^1.9.4",
-    "@changesets/cli": "^2.27.11",
-    "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^2.1.8",
-    "fast-check": "^3.23.2",
-    "openai": "^4.77.0",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "@anthropic-ai/sdk": "^0.98.0",
+    "@biomejs/biome": "^2.4.15",
+    "@changesets/cli": "^2.31.0",
+    "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "fast-check": "^4.8.0",
+    "openai": "^6.39.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
-  "trustedDependencies": ["@biomejs/biome"]
+  "trustedDependencies": [
+    "@biomejs/biome"
+  ]
 }
