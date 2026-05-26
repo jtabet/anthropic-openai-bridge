@@ -52,7 +52,7 @@ export type AnthropicStreamEncoderOptions = {
 
 type ActiveBlock =
   | { kind: "text"; index: number }
-  | { kind: "tool_use"; index: number; toolCallIndex: number; argsEmitted: number };
+  | { kind: "tool_use"; index: number; toolCallIndex: number };
 
 /**
  * Stateful encoder that converts OpenAI ChatCompletionChunk objects into
@@ -311,7 +311,6 @@ export class AnthropicStreamEncoder {
         kind: "tool_use",
         index: blockIndex,
         toolCallIndex: openaiIndex,
-        argsEmitted: 0,
       };
 
       // Flush any pre-buffered argument bytes.
@@ -326,7 +325,6 @@ export class AnthropicStreamEncoder {
             delta: { type: "input_json_delta", partial_json: combined },
           }),
         );
-        this.activeBlock.argsEmitted = combined.length;
         this.toolCallArgsAccumulated.set(openaiIndex, combined);
       }
       return;
@@ -336,16 +334,15 @@ export class AnthropicStreamEncoder {
     const argsHere = typeof tc.function?.arguments === "string" ? tc.function.arguments : "";
     if (argsHere.length === 0) return;
 
-    // If this tool_call's block is not currently active, re-activate it.
-    // (Some providers interleave deltas across multiple tool_calls; switching
-    // active block emits stop+start to preserve event lifecycle ordering.)
-    if (this.activeBlock === null || this.activeBlock.index !== blockIndex) {
-      if (this.activeBlock !== null) {
-        out.push(frameEvent({ type: "content_block_stop", index: this.activeBlock.index }));
-      }
-      // Re-open the block? Anthropic spec doesn't allow re-opening; but the
-      // canonical OpenAI streaming shape always groups deltas per tool_call,
-      // so this branch is reached only by an adversarial provider. Throw.
+    // Invariant: blockIndex came from toolCallToBlockIndex, which is only
+    // set when we open the block AND assign this.activeBlock. activeBlock is
+    // never nulled out within feed(); only end() does that, and end() flips
+    // `ended` so feed() bails before reaching here. So when we get here,
+    // activeBlock is non-null. If it doesn't match blockIndex, an
+    // adversarial provider has interleaved tool_call deltas after closing
+    // the block — Anthropic's spec forbids re-opening, so throw.
+    // biome-ignore lint/style/noNonNullAssertion: invariant documented above
+    if (this.activeBlock!.index !== blockIndex) {
       throw new InternalInvariantError(
         `tool_call delta for index ${openaiIndex} arrived after the block was closed; providers must keep tool_call deltas grouped`,
       );
@@ -358,11 +355,6 @@ export class AnthropicStreamEncoder {
         delta: { type: "input_json_delta", partial_json: argsHere },
       }),
     );
-    // biome-ignore lint/style/noNonNullAssertion: checked above
-    const ab = this.activeBlock!;
-    if (ab.kind === "tool_use") {
-      ab.argsEmitted += argsHere.length;
-    }
     const prev = this.toolCallArgsAccumulated.get(openaiIndex) ?? "";
     this.toolCallArgsAccumulated.set(openaiIndex, prev + argsHere);
   }
@@ -372,9 +364,7 @@ export class AnthropicStreamEncoder {
     // Anthropic's message_delta surfaces only output_tokens. input_tokens
     // is reported on message_start (where we currently set 0 — no upstream
     // value at start time). Drop prompt_tokens here.
-    if (typeof chunk.usage.completion_tokens === "number") {
-      this.completionTokens = chunk.usage.completion_tokens;
-    }
+    this.completionTokens = chunk.usage.completion_tokens;
   }
 }
 
