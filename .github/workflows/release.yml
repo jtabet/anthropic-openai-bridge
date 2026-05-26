@@ -60,8 +60,10 @@ jobs:
             exit 1
           fi
 
-      - name: Publish to npm with provenance (Trusted Publishing)
+      - name: Publish to npm with provenance
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
