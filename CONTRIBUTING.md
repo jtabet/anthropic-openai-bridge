@@ -39,12 +39,10 @@ Vitest v8 coverage requires Node's v8 inspector and does not run under bun's run
 
 1. **Fork & branch.** Branch from `main`.
 2. **Make your change.** Keep commits focused; squash if needed before pushing.
-3. **Add a changeset.** Run `bun x changeset` (or `npx changeset`) and describe your change. Pick the right bump:
-   - `patch` for bug fixes or stricter input validation
-   - `minor` for new supported features
-   - `major` for any change in the wire output of an existing input
-4. **Open a PR.** CI must be green: lint, typecheck, full test suite, 100% coverage, build, CodeQL.
-5. **Wait for review.** Small targeted PRs land fast.
+3. **Open a PR.** CI must be green: lint, typecheck, full test suite, 100% coverage, build, CodeQL.
+4. **Wait for review.** Small targeted PRs land fast.
+
+Releases are tag-driven and cut by the maintainer (see README → "Publishing a release"). No changeset file required per PR.
 
 ## Adding a test fixture
 

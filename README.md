@@ -186,12 +186,12 @@ This section exists so contributors and future maintainers understand *why* the 
 - **Trade-off.** None worth mentioning.
 - **Revisit if.** Vitest goes unmaintained.
 
-### Changesets for releases
+### Tag-driven releases (no Changesets)
 
-- **Decision.** PR-driven version bumps + changelog via `@changesets/cli`.
-- **Why.** De facto standard for serious npm libs. Each PR adds a `.changeset/<slug>.md` describing the change and the bump level; CI then opens a "Version Packages" PR that, when merged, tags and publishes.
-- **Trade-off.** Slight ceremony per PR.
-- **Revisit if.** A drop-in alternative offers a noticeably better DX.
+- **Decision.** Releases fire on a `v*` git tag. The workflow runs verify, then `npm publish` with provenance via Trusted Publishing. No release PR.
+- **Why.** This is a small, single-maintainer library with infrequent releases. Changesets' "Version Packages PR" flow earns its keep when many contributors queue changes between releases; here it was pure ceremony. Tagging is one command, mental model is "tag = release."
+- **Trade-off.** No automatic version-bump validation and no auto-generated changelog (GitHub Release notes are generated from PR titles via `softprops/action-gh-release`, which is good enough for now). You bump `package.json` by hand.
+- **Revisit if.** The project gains regular contributors or releases get frequent enough that a batched release PR would actually batch something.
 
 ### 100% line + branch coverage gate
 
@@ -239,6 +239,22 @@ This section exists so contributors and future maintainers understand *why* the 
 
 Semantic versioning. A change is a **major** bump if it alters the wire output for a given input (i.e., translates the same Anthropic request into a different OpenAI request than before). New supported features are minor bumps. Bug fixes and stricter input validation are patches.
 
+## Publishing a release (maintainers)
+
+Releases are tag-driven. To publish a new version:
+
+```bash
+# 1. Update version in package.json (use semver: patch / minor / major)
+npm version patch       # or minor / major; creates the git tag too
+
+# 2. Push commit + tag
+git push --follow-tags
+```
+
+The `release.yml` workflow fires on the `v*` tag, runs the full verify pipeline, then publishes to npm with provenance via Trusted Publishing (OIDC). A GitHub Release is created automatically with notes generated from PR titles since the last tag.
+
+If you need to publish from the GitHub UI instead (e.g. after fixing a misconfigured workflow), run the *Release* workflow manually via `Actions → Release → Run workflow`. The tag-match check ensures `package.json` and the tag agree before publish.
+
 ## Security
 
 See [`SECURITY.md`](./SECURITY.md). Private vulnerability reporting via GitHub Security Advisories.
@@ -247,7 +263,7 @@ The library treats input as untrusted (in production it is literally user-contro
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md). PRs land via Changesets; the most common contribution is adding a fixture or test case.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md). The most common contribution is adding a fixture or test case.
 
 ## License
 
