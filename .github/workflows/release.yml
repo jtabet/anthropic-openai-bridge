@@ -49,10 +49,13 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          # Publishes via npm with provenance because publishConfig.provenance
-          # is set in package.json and id-token: write is granted above.
+          # Publishes via npm using Trusted Publishing (OIDC). No NPM_TOKEN
+          # secret is needed — the package must be configured with a Trusted
+          # Publisher on npmjs.com pointing at this repo + workflow. The
+          # `id-token: write` permission above is what npm verifies.
+          # Provenance attestation is emitted automatically because
+          # publishConfig.provenance is set in package.json.
           publish: bun x changeset publish
           version: bun x changeset version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
