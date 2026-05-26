@@ -78,7 +78,7 @@
     "openai": "^4.77.0",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.7"
   },
   "publishConfig": {
     "access": "public",
