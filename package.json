@@ -77,7 +77,7 @@
     "fast-check": "^3.23.2",
     "openai": "^4.77.0",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.3",
+    "typescript": "^6.0.3",
     "vitest": "^2.1.8"
   },
   "publishConfig": {
