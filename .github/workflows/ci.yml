@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install (frozen)
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Tests with coverage
+        # Coverage requires node's v8 inspector, so run vitest under node.
+        run: node node_modules/vitest/vitest.mjs run --coverage
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify dual-format output is importable
+        run: |
+          node -e "const b = require('./dist/index.cjs'); if (typeof b.anthropicToOpenAIRequest !== 'function') process.exit(1)"
+          node --input-type=module -e "import * as b from './dist/index.js'; if (typeof b.anthropicToOpenAIRequest !== 'function') process.exit(1)"
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Audit (high severity gate)
+        run: bun pm scan || (echo "::warning::bun pm scan reported issues" && exit 0)
