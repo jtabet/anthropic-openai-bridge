@@ -104,9 +104,10 @@ See [`examples/`](./examples) for full Express and Bun shims (~30 LoC each).
 | `is_error` on `tool_result`        | ✅ Supported | Content prefixed with `[error]` |
 | `thinking` blocks                  | ⚠️ Dropped   | No OpenAI analogue — silently discarded |
 | `top_k`                            | ⚠️ Dropped   | No OpenAI analogue |
-| Image content blocks               | ❌ Rejected  | Throws `UnsupportedFeatureError`. Planned for v0.2 |
+| Image content blocks (user)        | ✅ Supported | `base64` & `url` sources → OpenAI `image_url` vision parts |
+| Image blocks (assistant/tool_result)| ❌ Rejected  | Throws `UnsupportedFeatureError` — OpenAI accepts images only in user content |
 | Citations / web search             | ❌ Rejected  | Not modeled in OpenAI Chat Completions |
-| `disable_parallel_tool_use`        | ⚠️ Dropped   | Could map to OpenAI `parallel_tool_calls: false` in a future minor |
+| `disable_parallel_tool_use`        | ✅ Supported | → OpenAI `parallel_tool_calls: false` |
 
 ## Examples
 
@@ -221,12 +222,12 @@ This section exists so contributors and future maintainers understand *why* the 
 - **Trade-off.** Loss of reasoning context if the model relies on it.
 - **Revisit if.** OpenAI ships a comparable feature, or when a consumer needs a lossy compatibility mode that surfaces thinking as plain text.
 
-### Vision/image content blocks rejected (not dropped)
+### Vision/image content blocks translated in user turns; rejected elsewhere
 
-- **Decision.** Image content blocks throw `UnsupportedFeatureError`.
-- **Why.** Unlike `thinking`, dropping an image would lose user-supplied context — silently degrading the request in a way the caller would have no way to detect. An explicit error is the safer default.
-- **Trade-off.** Consumers wanting partial functionality must catch the error and choose what to do.
-- **Revisit if.** Image-block translation lands in v0.2 (mapping to OpenAI vision parts is doable).
+- **Decision.** Image blocks in **user** messages translate to OpenAI `image_url` vision parts (`base64` → a `data:` URL, `url` → passthrough). Image blocks in **assistant** messages or inside a `tool_result` still throw `UnsupportedFeatureError`.
+- **Why.** OpenAI accepts images only in user content, so user-turn images have a faithful mapping. There is no slot for an image in an assistant or tool message — silently dropping one would lose context the caller can't detect, so an explicit error stays the safer default there. A user turn that contains an image is emitted as an ordered parts array; image-free turns stay a plain concatenated string, so existing translations are byte-identical.
+- **Trade-off.** Two code paths for user content (string vs. parts array). Consumers using assistant/tool_result images must still catch the error.
+- **Revisit if.** OpenAI introduces an image representation for assistant or tool messages.
 
 ### Public surface only via `src/index.ts`
 

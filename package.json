@@ -1,6 +1,6 @@
 {
   "name": "@jtabet/anthropic-openai-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Anthropic ↔ OpenAI API format translation. Use Claude Code with any OpenAI-compatible backend. Pure functions, framework-agnostic, zero runtime deps.",
   "keywords": [
     "anthropic",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MalformedInputError, UnsupportedFeatureError } from "../src/errors.js";
 import { anthropicToOpenAIRequest } from "../src/request.js";
-import type { AnthropicMessagesRequest } from "../src/types.js";
+import type { AnthropicImageBlock, AnthropicMessagesRequest } from "../src/types.js";
 
 const base = (): AnthropicMessagesRequest => ({
   model: "claude-sonnet-4-6",
@@ -249,7 +249,28 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
     expect(out.messages[1]).toEqual({ role: "assistant", content: "reply" });
   });
 
-  it("rejects image blocks in user messages", () => {
+  it("converts base64 image blocks in user messages to OpenAI vision parts", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what is this?" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+        ],
+      },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "what is this?" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    });
+  });
+
+  it("converts url image blocks in user messages", () => {
     const req = base();
     req.messages = [
       {
@@ -257,7 +278,65 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
         content: [{ type: "image", source: { type: "url", url: "https://example.com/x.png" } }],
       },
     ];
-    expect(() => anthropicToOpenAIRequest(req)).toThrow(UnsupportedFeatureError);
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({
+      role: "user",
+      content: [{ type: "image_url", image_url: { url: "https://example.com/x.png" } }],
+    });
+  });
+
+  it("rejects image block with a non-object source", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "user",
+        content: [{ type: "image", source: null as unknown as AnthropicImageBlock["source"] }],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/source/);
+  });
+
+  it("rejects base64 image with missing media_type or data", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "user",
+        content: [{ type: "image", source: { type: "base64", media_type: "", data: "x" } }],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/media_type/);
+
+    req.messages = [
+      {
+        role: "user",
+        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "" } }],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/data/);
+  });
+
+  it("rejects url image with an empty url", () => {
+    const req = base();
+    req.messages = [
+      { role: "user", content: [{ type: "image", source: { type: "url", url: "" } }] },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/url/);
+  });
+
+  it("rejects an unknown image source type", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "raw" } as unknown as AnthropicImageBlock["source"],
+          },
+        ],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/source type/);
   });
 
   it("rejects image blocks in assistant messages", () => {
@@ -511,6 +590,36 @@ describe("anthropicToOpenAIRequest — tools and tool_choice", () => {
   it("omits tool_choice when not provided", () => {
     const req = base();
     expect(anthropicToOpenAIRequest(req).tool_choice).toBeUndefined();
+  });
+
+  it("maps disable_parallel_tool_use to parallel_tool_calls:false on every choice type", () => {
+    const req = base();
+    req.tools = [{ name: "x", input_schema: {} }];
+
+    req.tool_choice = { type: "auto", disable_parallel_tool_use: true };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBe(false);
+
+    req.tool_choice = { type: "any", disable_parallel_tool_use: true };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBe(false);
+
+    req.tool_choice = { type: "tool", name: "x", disable_parallel_tool_use: true };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBe(false);
+  });
+
+  it("omits parallel_tool_calls when disable_parallel_tool_use is absent, false, or n/a", () => {
+    const req = base();
+
+    req.tool_choice = { type: "auto" };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBeUndefined();
+
+    req.tool_choice = { type: "auto", disable_parallel_tool_use: false };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBeUndefined();
+
+    req.tool_choice = { type: "none" };
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBeUndefined();
+
+    delete req.tool_choice;
+    expect(anthropicToOpenAIRequest(req).parallel_tool_calls).toBeUndefined();
   });
 });
 

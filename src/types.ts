@@ -174,7 +174,14 @@ export type AnthropicStreamEvent =
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type OpenAISystemMessage = { role: "system"; content: string };
-export type OpenAIUserMessage = { role: "user"; content: string };
+
+export type OpenAITextPart = { type: "text"; text: string };
+export type OpenAIImagePart = { type: "image_url"; image_url: { url: string } };
+export type OpenAIContentPart = OpenAITextPart | OpenAIImagePart;
+
+// User content is a plain string when the turn is text-only, or an ordered
+// array of parts (OpenAI vision format) when it contains at least one image.
+export type OpenAIUserMessage = { role: "user"; content: string | OpenAIContentPart[] };
 export type OpenAIAssistantMessage = {
   role: "assistant";
   content: string | null;
@@ -220,6 +227,7 @@ export type OpenAIChatRequest = {
   stop?: string | string[];
   tools?: OpenAITool[];
   tool_choice?: OpenAIToolChoiceField;
+  parallel_tool_calls?: boolean;
   stream?: boolean;
   user?: string;
 };

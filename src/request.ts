@@ -10,6 +10,7 @@ import { MalformedInputError, UnsupportedFeatureError } from "./errors.js";
 import { mapToolChoice } from "./mappings.js";
 import type {
   AnthropicContentBlock,
+  AnthropicImageBlock,
   AnthropicMessage,
   AnthropicMessagesRequest,
   AnthropicTextBlock,
@@ -17,6 +18,8 @@ import type {
   AnthropicToolUseBlock,
   OpenAIAssistantMessage,
   OpenAIChatRequest,
+  OpenAIContentPart,
+  OpenAIImagePart,
   OpenAIMessage,
   OpenAITool,
   OpenAIToolMessage,
@@ -28,9 +31,9 @@ import type {
  * request. Validates required fields and rejects unsupported features.
  *
  * @throws {MalformedInputError} when required fields are missing or malformed.
- * @throws {UnsupportedFeatureError} when the request contains image content
- *   blocks (planned for v0.2) or any other feature this bridge does not
- *   translate.
+ * @throws {UnsupportedFeatureError} when the request contains a feature with no
+ *   OpenAI representation — e.g. an image block in an assistant message or
+ *   inside a tool_result (OpenAI accepts images only in user content).
  *
  * @example
  * ```ts
@@ -85,6 +88,16 @@ export function anthropicToOpenAIRequest(input: AnthropicMessagesRequest): OpenA
   const toolChoice = mapToolChoice(input.tool_choice);
   if (toolChoice !== undefined) {
     output.tool_choice = toolChoice;
+  }
+
+  // Anthropic carries `disable_parallel_tool_use` on the tool_choice object;
+  // OpenAI exposes the inverse as a sibling request field.
+  if (
+    input.tool_choice !== undefined &&
+    input.tool_choice.type !== "none" &&
+    input.tool_choice.disable_parallel_tool_use === true
+  ) {
+    output.parallel_tool_calls = false;
   }
 
   // `thinking`, `top_k`: silently dropped — no OpenAI equivalent.
@@ -167,13 +180,19 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
 }
 
 function convertUserBlocks(blocks: AnthropicContentBlock[], path: string): OpenAIMessage[] {
-  // A user turn may contain text blocks AND tool_result blocks. Tool results
-  // map to separate OpenAI `role:'tool'` messages; text blocks merge into a
-  // single user message preceding them. The Messages API does not constrain
-  // the order strictly, but emitting tool messages first (per their original
-  // order) and then the text user message keeps the OpenAI shape clean.
+  // A user turn may contain text, image, and tool_result blocks. Tool results
+  // map to separate OpenAI `role:'tool'` messages; text and image blocks merge
+  // into a single user message preceding them. The Messages API does not
+  // constrain the order strictly, but emitting tool messages first (per their
+  // original order) and then the user message keeps the OpenAI shape clean.
+  //
+  // When the turn contains at least one image, the user message content is an
+  // ordered parts array (OpenAI vision format); otherwise it stays a plain
+  // concatenated string so image-free requests translate exactly as before.
   const textParts: string[] = [];
+  const parts: OpenAIContentPart[] = [];
   const toolMessages: OpenAIToolMessage[] = [];
+  let hasImage = false;
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i] as AnthropicContentBlock;
@@ -192,17 +211,17 @@ function convertUserBlocks(blocks: AnthropicContentBlock[], path: string): OpenA
           throw new MalformedInputError("text block requires a string `text`", `${subPath}.text`);
         }
         textParts.push(block.text);
+        parts.push({ type: "text", text: block.text });
+        break;
+
+      case "image":
+        parts.push(convertImageBlock(block, subPath));
+        hasImage = true;
         break;
 
       case "tool_result":
         toolMessages.push(convertToolResult(block, subPath));
         break;
-
-      case "image":
-        throw new UnsupportedFeatureError(
-          "image",
-          `Image content blocks are not supported in this bridge version (at ${subPath}). Planned for v0.2.`,
-        );
 
       case "thinking":
         // Silently dropped — see README design decisions.
@@ -223,10 +242,54 @@ function convertUserBlocks(blocks: AnthropicContentBlock[], path: string): OpenA
   }
 
   const out: OpenAIMessage[] = [...toolMessages];
-  if (textParts.length > 0) {
+  if (hasImage) {
+    out.push({ role: "user", content: parts } satisfies OpenAIUserMessage);
+  } else if (textParts.length > 0) {
     out.push({ role: "user", content: textParts.join("\n\n") } satisfies OpenAIUserMessage);
   }
   return out;
+}
+
+function convertImageBlock(block: AnthropicImageBlock, path: string): OpenAIImagePart {
+  const source = (block as { source?: unknown }).source;
+  if (source === null || typeof source !== "object") {
+    throw new MalformedInputError("image block requires a `source` object", `${path}.source`);
+  }
+  const src = source as { type?: unknown; media_type?: unknown; data?: unknown; url?: unknown };
+
+  if (src.type === "base64") {
+    if (typeof src.media_type !== "string" || src.media_type.length === 0) {
+      throw new MalformedInputError(
+        "base64 image source requires a string `media_type`",
+        `${path}.source.media_type`,
+      );
+    }
+    if (typeof src.data !== "string" || src.data.length === 0) {
+      throw new MalformedInputError(
+        "base64 image source requires a string `data`",
+        `${path}.source.data`,
+      );
+    }
+    return {
+      type: "image_url",
+      image_url: { url: `data:${src.media_type};base64,${src.data}` },
+    };
+  }
+
+  if (src.type === "url") {
+    if (typeof src.url !== "string" || src.url.length === 0) {
+      throw new MalformedInputError(
+        "url image source requires a string `url`",
+        `${path}.source.url`,
+      );
+    }
+    return { type: "image_url", image_url: { url: src.url } };
+  }
+
+  throw new MalformedInputError(
+    `unsupported image source type "${String(src.type)}"`,
+    `${path}.source.type`,
+  );
 }
 
 function convertAssistantBlocks(blocks: AnthropicContentBlock[], path: string): OpenAIMessage[] {
