@@ -72,7 +72,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.98.0",
+    "@anthropic-ai/sdk": "^0.100.1",
     "@biomejs/biome": "^2.4.15",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.7",
