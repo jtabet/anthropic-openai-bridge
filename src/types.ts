@@ -61,7 +61,7 @@ export type AnthropicContentBlock =
   | AnthropicThinkingBlock;
 
 export type AnthropicMessage = {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string | AnthropicContentBlock[];
 };
 

@@ -391,7 +391,37 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
 
   it("rejects unknown role", () => {
     const req = base();
-    (req.messages[0] as { role: string }).role = "system";
+    (req.messages[0] as { role: string }).role = "developer";
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
+  });
+
+  it("accepts system message in messages array with string content", () => {
+    const req = base();
+    req.messages = [
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "Hi" },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({ role: "system", content: "You are helpful." });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hi" });
+  });
+
+  it("accepts system message in messages array with text blocks", () => {
+    const req = base();
+    req.messages = [
+      { role: "system", content: [{ type: "text", text: "Line one." }, { type: "text", text: "Line two." }] },
+      { role: "user", content: "Hi" },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({ role: "system", content: "Line one.\n\nLine two." });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hi" });
+  });
+
+  it("rejects non-text blocks in system message array content", () => {
+    const req = base();
+    req.messages = [
+      { role: "system", content: [{ type: "image", source: { type: "url", url: "https://example.com/x.png" } }] },
+    ];
     expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
   });
 

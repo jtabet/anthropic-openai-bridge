@@ -21,6 +21,7 @@ import type {
   OpenAIContentPart,
   OpenAIImagePart,
   OpenAIMessage,
+  OpenAISystemMessage,
   OpenAITool,
   OpenAIToolMessage,
   OpenAIUserMessage,
@@ -152,9 +153,9 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
   if (msg === null || typeof msg !== "object") {
     throw new MalformedInputError("message must be an object", path);
   }
-  if (msg.role !== "user" && msg.role !== "assistant") {
+  if (msg.role !== "user" && msg.role !== "assistant" && msg.role !== "system") {
     throw new MalformedInputError(
-      `unsupported role "${(msg as { role: unknown }).role}" (expected "user" or "assistant")`,
+      `unsupported role "${(msg as { role: unknown }).role}" (expected "user", "assistant", or "system")`,
       `${path}.role`,
     );
   }
@@ -164,6 +165,9 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
     if (msg.role === "user") {
       return [{ role: "user", content: msg.content } satisfies OpenAIUserMessage];
     }
+    if (msg.role === "system") {
+      return [{ role: "system", content: msg.content } satisfies OpenAISystemMessage];
+    }
     return [{ role: "assistant", content: msg.content } satisfies OpenAIAssistantMessage];
   }
 
@@ -172,6 +176,32 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
       "message.content must be a string or an array of content blocks",
       `${path}.content`,
     );
+  }
+
+  if (msg.role === "system") {
+    // System messages may contain text blocks; images and tool blocks are
+    // rejected. Concatenate text parts with double newlines, matching the
+    // top-level `system` parameter flattening in Anthropic's own compat layer.
+    const textParts: string[] = [];
+    for (let i = 0; i < msg.content.length; i++) {
+      const block = msg.content[i];
+      const subPath = `${path}.content[${i}]`;
+      if (block === null || typeof block !== "object" || typeof (block as { type?: unknown }).type !== "string") {
+        throw new MalformedInputError("content block must have a string type", subPath);
+      }
+      if (block.type === "text") {
+        if (typeof block.text !== "string") {
+          throw new MalformedInputError("text block requires a string `text`", `${subPath}.text`);
+        }
+        textParts.push(block.text);
+      } else {
+        throw new MalformedInputError(
+          `unsupported content block type "${block.type}" in system message`,
+          subPath,
+        );
+      }
+    }
+    return [{ role: "system", content: textParts.join("\n\n") } satisfies OpenAISystemMessage];
   }
 
   return msg.role === "user"
