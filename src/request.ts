@@ -6,7 +6,7 @@
  * allocated; the input is never mutated.
  */
 
-import { InternalInvariantError, MalformedInputError, UnsupportedFeatureError } from "./errors.js";
+import { MalformedInputError, UnsupportedFeatureError } from "./errors.js";
 import { mapToolChoice } from "./mappings.js";
 import type {
   AnthropicContentBlock,
@@ -229,21 +229,13 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
     throw new MalformedInputError("message must be an object", path);
   }
   // `role: "system"` is hoisted to the leading system message by the caller
-  // (see `anthropicToOpenAIRequest`), so only user/assistant can reach this
-  // defensive check. The input type still permits "system" because some
-  // Anthropic clients (notably Claude Code) inject system messages mid-array.
+  // (see `anthropicToOpenAIRequest`), so under normal flow only user/assistant
+  // reach here. The input type still permits "system" because some Anthropic
+  // clients (notably Claude Code) inject system messages mid-array.
   if (msg.role !== "user" && msg.role !== "assistant" && msg.role !== "system") {
     throw new MalformedInputError(
       `unsupported role "${(msg as { role: unknown }).role}" (expected "user", "assistant", or "system")`,
       `${path}.role`,
-    );
-  }
-  // Belt-and-suspenders: if a "system" message somehow reached here (e.g.
-  // future caller forgets the hoisting pass), reject it loudly rather than
-  // emit it at a non-leading index and trigger an upstream 400.
-  if (msg.role === "system") {
-    throw new InternalInvariantError(
-      `role: "system" must be hoisted to the leading system message by the caller (at ${path})`,
     );
   }
 
