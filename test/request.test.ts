@@ -409,7 +409,13 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
   it("accepts system message in messages array with text blocks", () => {
     const req = base();
     req.messages = [
-      { role: "system", content: [{ type: "text", text: "Line one." }, { type: "text", text: "Line two." }] },
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "Line one." },
+          { type: "text", text: "Line two." },
+        ],
+      },
       { role: "user", content: "Hi" },
     ];
     const out = anthropicToOpenAIRequest(req);
@@ -420,7 +426,10 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
   it("rejects non-text blocks in system message array content", () => {
     const req = base();
     req.messages = [
-      { role: "system", content: [{ type: "image", source: { type: "url", url: "https://example.com/x.png" } }] },
+      {
+        role: "system",
+        content: [{ type: "image", source: { type: "url", url: "https://example.com/x.png" } }],
+      },
     ];
     expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
   });

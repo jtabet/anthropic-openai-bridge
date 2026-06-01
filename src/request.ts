@@ -186,7 +186,11 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
     for (let i = 0; i < msg.content.length; i++) {
       const block = msg.content[i];
       const subPath = `${path}.content[${i}]`;
-      if (block === null || typeof block !== "object" || typeof (block as { type?: unknown }).type !== "string") {
+      if (
+        block === null ||
+        typeof block !== "object" ||
+        typeof (block as { type?: unknown }).type !== "string"
+      ) {
         throw new MalformedInputError("content block must have a string type", subPath);
       }
       if (block.type === "text") {
