@@ -434,6 +434,28 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
     expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
   });
 
+  it("rejects a system content block with a missing type", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "system",
+        content: [{ text: "oops" }],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
+  });
+
+  it("rejects a system text block whose text is not a string", () => {
+    const req = base();
+    req.messages = [
+      {
+        role: "system",
+        content: [{ type: "text", text: 42 }],
+      },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
+  });
+
   it("rejects null message", () => {
     const req = base();
     (req.messages as unknown as Array<unknown>)[0] = null;
