@@ -38,7 +38,10 @@ jobs:
       - name: Set up Node (required by npm publish for OIDC)
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          # Node 24+ ships npm 11.5.1+, which the npm registry requires for
+          # OIDC trusted publishing. Node 22 ships npm 10.x and produces a
+          # misleading E404 on PUT (see run 26780418451).
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install (frozen)
