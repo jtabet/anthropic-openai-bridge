@@ -6,7 +6,7 @@
  * allocated; the input is never mutated.
  */
 
-import { MalformedInputError, UnsupportedFeatureError } from "./errors.js";
+import { InternalInvariantError, MalformedInputError, UnsupportedFeatureError } from "./errors.js";
 import { mapToolChoice } from "./mappings.js";
 import type {
   AnthropicContentBlock,
@@ -50,17 +50,52 @@ export function anthropicToOpenAIRequest(input: AnthropicMessagesRequest): OpenA
 
   const messages: OpenAIMessage[] = [];
 
-  // System prompt becomes a synthetic first message. Anthropic allows either
-  // a plain string or an array of text blocks; flatten to a single string by
-  // concatenating block texts with double newlines.
+  // OpenAI's Chat Completions API requires every `role: "system"` message to
+  // sit at the very beginning of the `messages` array (and to be consecutive).
+  // Anthropic accepts system content two ways: a top-level `system` field and
+  // `role: "system"` messages anywhere in the array. Some clients (notably
+  // Claude Code) inject the latter mid-conversation for "[Request interrupted
+  // by user]" reminders, environment stamps, etc. — pushing those through
+  // verbatim produces a 400 "System message must be at the beginning" on
+  // OpenAI. We consolidate *all* system content into a single leading system
+  // message: top-level `system` first (its original semantics), then any
+  // array-resident system messages in their original order, each separated by
+  // a blank line.
+  const systemParts: string[] = [];
   if (input.system !== undefined) {
-    const systemText = flattenSystem(input.system);
-    if (systemText.length > 0) {
-      messages.push({ role: "system", content: systemText });
+    const topLevel = flattenSystem(input.system);
+    if (topLevel.length > 0) systemParts.push(topLevel);
+  }
+
+  // First pass: hoist array-resident system messages, remember which indices
+  // are non-system so we can re-iterate them in order with their original
+  // `messages[N]` paths preserved for error messages.
+  const nonSystemIndices: number[] = [];
+  for (let i = 0; i < input.messages.length; i++) {
+    const msg = input.messages[i];
+    if (msg === null || typeof msg !== "object") {
+      // Defer to `convertMessage` for the actual error path; just record the
+      // index so we still iterate it in the second pass.
+      nonSystemIndices.push(i);
+      continue;
+    }
+    const role = (msg as { role?: unknown }).role;
+    if (role === "system") {
+      const systemText = flattenSystemMessage(msg as AnthropicMessage, `messages[${i}]`);
+      if (systemText.length > 0) systemParts.push(systemText);
+    } else {
+      nonSystemIndices.push(i);
     }
   }
 
-  for (let i = 0; i < input.messages.length; i++) {
+  if (systemParts.length > 0) {
+    messages.push({
+      role: "system",
+      content: systemParts.join("\n\n"),
+    } satisfies OpenAISystemMessage);
+  }
+
+  for (const i of nonSystemIndices) {
     const msg = input.messages[i] as AnthropicMessage;
     const converted = convertMessage(msg, `messages[${i}]`);
     for (const c of converted) {
@@ -149,14 +184,66 @@ function flattenSystem(system: string | AnthropicTextBlock[]): string {
   return parts.join("\n\n");
 }
 
+/**
+ * Flatten a `role: "system"` message to a single string. The top-level
+ * `system` parameter and array-resident system messages share the same shape
+ * (string | text-block[]), so the logic mirrors `flattenSystem` — but the
+ * error paths differ because the input lives inside `messages[N]`.
+ */
+function flattenSystemMessage(msg: AnthropicMessage, path: string): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (!Array.isArray(msg.content)) {
+    throw new MalformedInputError(
+      "message.content must be a string or an array of content blocks",
+      `${path}.content`,
+    );
+  }
+  const parts: string[] = [];
+  for (let i = 0; i < msg.content.length; i++) {
+    const block = msg.content[i];
+    const subPath = `${path}.content[${i}]`;
+    if (
+      block === null ||
+      typeof block !== "object" ||
+      typeof (block as { type?: unknown }).type !== "string"
+    ) {
+      throw new MalformedInputError("content block must have a string type", subPath);
+    }
+    if (block.type === "text") {
+      if (typeof block.text !== "string") {
+        throw new MalformedInputError("text block requires a string `text`", `${subPath}.text`);
+      }
+      parts.push(block.text);
+    } else {
+      throw new MalformedInputError(
+        `unsupported content block type "${block.type}" in system message`,
+        subPath,
+      );
+    }
+  }
+  return parts.join("\n\n");
+}
+
 function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
   if (msg === null || typeof msg !== "object") {
     throw new MalformedInputError("message must be an object", path);
   }
+  // `role: "system"` is hoisted to the leading system message by the caller
+  // (see `anthropicToOpenAIRequest`), so only user/assistant can reach this
+  // defensive check. The input type still permits "system" because some
+  // Anthropic clients (notably Claude Code) inject system messages mid-array.
   if (msg.role !== "user" && msg.role !== "assistant" && msg.role !== "system") {
     throw new MalformedInputError(
       `unsupported role "${(msg as { role: unknown }).role}" (expected "user", "assistant", or "system")`,
       `${path}.role`,
+    );
+  }
+  // Belt-and-suspenders: if a "system" message somehow reached here (e.g.
+  // future caller forgets the hoisting pass), reject it loudly rather than
+  // emit it at a non-leading index and trigger an upstream 400.
+  if (msg.role === "system") {
+    throw new InternalInvariantError(
+      `role: "system" must be hoisted to the leading system message by the caller (at ${path})`,
     );
   }
 
@@ -164,9 +251,6 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
   if (typeof msg.content === "string") {
     if (msg.role === "user") {
       return [{ role: "user", content: msg.content } satisfies OpenAIUserMessage];
-    }
-    if (msg.role === "system") {
-      return [{ role: "system", content: msg.content } satisfies OpenAISystemMessage];
     }
     return [{ role: "assistant", content: msg.content } satisfies OpenAIAssistantMessage];
   }
@@ -176,36 +260,6 @@ function convertMessage(msg: AnthropicMessage, path: string): OpenAIMessage[] {
       "message.content must be a string or an array of content blocks",
       `${path}.content`,
     );
-  }
-
-  if (msg.role === "system") {
-    // System messages may contain text blocks; images and tool blocks are
-    // rejected. Concatenate text parts with double newlines, matching the
-    // top-level `system` parameter flattening in Anthropic's own compat layer.
-    const textParts: string[] = [];
-    for (let i = 0; i < msg.content.length; i++) {
-      const block = msg.content[i];
-      const subPath = `${path}.content[${i}]`;
-      if (
-        block === null ||
-        typeof block !== "object" ||
-        typeof (block as { type?: unknown }).type !== "string"
-      ) {
-        throw new MalformedInputError("content block must have a string type", subPath);
-      }
-      if (block.type === "text") {
-        if (typeof block.text !== "string") {
-          throw new MalformedInputError("text block requires a string `text`", `${subPath}.text`);
-        }
-        textParts.push(block.text);
-      } else {
-        throw new MalformedInputError(
-          `unsupported content block type "${block.type}" in system message`,
-          subPath,
-        );
-      }
-    }
-    return [{ role: "system", content: textParts.join("\n\n") } satisfies OpenAISystemMessage];
   }
 
   return msg.role === "user"

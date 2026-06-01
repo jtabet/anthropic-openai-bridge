@@ -434,6 +434,123 @@ describe("anthropicToOpenAIRequest — message conversion", () => {
     expect(() => anthropicToOpenAIRequest(req)).toThrow(MalformedInputError);
   });
 
+  it("hoists a mid-conversation system message to the leading position", () => {
+    // Regression: OpenAI rejects any `role: "system"` message that is not at
+    // the start of the array. Claude Code (and similar Anthropic clients)
+    // inject system reminders mid-conversation — those must be hoisted,
+    // otherwise the upstream OpenAI API returns 400 "System message must be
+    // at the beginning".
+    const req = base();
+    req.system = "You are helpful.";
+    req.messages = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi!" },
+      { role: "user", content: "How are you?" },
+      { role: "system", content: "[Request interrupted by user]" },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({
+      role: "system",
+      content: "You are helpful.\n\n[Request interrupted by user]",
+    });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hello" });
+    expect(out.messages[2]).toEqual({ role: "assistant", content: "Hi!" });
+    expect(out.messages[3]).toEqual({ role: "user", content: "How are you?" });
+    // No system message should appear after index 0.
+    expect(out.messages.filter((m) => m.role === "system")).toHaveLength(1);
+  });
+
+  it("hoists a mid-conversation system message with text-block content", () => {
+    const req = base();
+    req.messages = [
+      { role: "user", content: "Hi" },
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "Reminder A." },
+          { type: "text", text: "Reminder B." },
+        ],
+      },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({ role: "system", content: "Reminder A.\n\nReminder B." });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hi" });
+  });
+
+  it("concatenates multiple system messages in the array, preserving order", () => {
+    const req = base();
+    req.messages = [
+      { role: "system", content: "First." },
+      { role: "user", content: "Hi" },
+      { role: "system", content: "Second." },
+      { role: "assistant", content: "Hello" },
+      { role: "system", content: "Third." },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({
+      role: "system",
+      content: "First.\n\nSecond.\n\nThird.",
+    });
+    // Subsequent messages keep their original relative order.
+    expect(out.messages.slice(1)).toEqual([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Hello" },
+    ]);
+  });
+
+  it("merges top-level system with hoisted system messages in order: top-level first", () => {
+    const req = base();
+    req.system = [
+      { type: "text", text: "Top A." },
+      { type: "text", text: "Top B." },
+    ];
+    req.messages = [
+      { role: "user", content: "Hi" },
+      { role: "system", content: "Array reminder." },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({
+      role: "system",
+      content: "Top A.\n\nTop B.\n\nArray reminder.",
+    });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hi" });
+  });
+
+  it("emits a hoisted system message even when top-level system is empty", () => {
+    const req = base();
+    req.system = "";
+    req.messages = [
+      { role: "user", content: "Hi" },
+      { role: "system", content: "Injected reminder." },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]).toEqual({ role: "system", content: "Injected reminder." });
+    expect(out.messages[1]).toEqual({ role: "user", content: "Hi" });
+  });
+
+  it("emits no system message when top-level is empty and all array system messages are empty", () => {
+    const req = base();
+    req.system = "";
+    req.messages = [
+      { role: "system", content: "" },
+      { role: "user", content: "Hi" },
+    ];
+    const out = anthropicToOpenAIRequest(req);
+    expect(out.messages[0]?.role).toBe("user");
+  });
+
+  it("preserves the original messages[N] path when validating a hoisted system message", () => {
+    // Error paths on hoisted system messages must still use the original
+    // array index — otherwise the consumer loses information about *which*
+    // message was malformed.
+    const req = base();
+    req.messages = [
+      { role: "user", content: "Hi" },
+      { role: "system", content: 42 as never },
+    ];
+    expect(() => anthropicToOpenAIRequest(req)).toThrow(/messages\[1\]\.content/);
+  });
+
   it("rejects a system content block with a missing type", () => {
     const req = base();
     req.messages = [

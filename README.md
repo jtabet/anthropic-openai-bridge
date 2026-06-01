@@ -94,6 +94,7 @@ See [`examples/`](./examples) for full Express and Bun shims (~30 LoC each).
 |------------------------------------|-------------|-------|
 | System prompt (string)             | ✅ Supported |       |
 | System prompt (text-block array)   | ✅ Supported | Concatenated with `\n\n` |
+| `role: "system"` messages in array | ✅ Supported | Hoisted to the leading system message, concatenated with `\n\n`. OpenAI's Chat Completions API requires every system message to sit at index 0; the bridge enforces that invariant even when clients (e.g. Claude Code) inject system reminders mid-conversation. |
 | Text content blocks                | ✅ Supported |       |
 | `tool_use` / `tool_result` blocks  | ✅ Supported |       |
 | `tool_choice` (auto/any/tool/none) | ✅ Supported | `any` → OpenAI `required` |
@@ -228,6 +229,13 @@ This section exists so contributors and future maintainers understand *why* the 
 - **Why.** OpenAI accepts images only in user content, so user-turn images have a faithful mapping. There is no slot for an image in an assistant or tool message — silently dropping one would lose context the caller can't detect, so an explicit error stays the safer default there. A user turn that contains an image is emitted as an ordered parts array; image-free turns stay a plain concatenated string, so existing translations are byte-identical.
 - **Trade-off.** Two code paths for user content (string vs. parts array). Consumers using assistant/tool_result images must still catch the error.
 - **Revisit if.** OpenAI introduces an image representation for assistant or tool messages.
+
+### `role: "system"` messages hoisted to the leading system message
+
+- **Decision.** Every `role: "system"` message found anywhere in the `messages` array is extracted and merged with the top-level `system` field into a single leading OpenAI system message. Parts are concatenated in original order with `\n\n` separators (top-level first, then array-resident system messages in their array order).
+- **Why.** OpenAI's Chat Completions API has a hard constraint: all system messages must sit at index 0 (and be consecutive). Forwarding a system message at any other index produces `400 "System message must be at the beginning"`. Anthropic itself doesn't document `role: "system"` in the messages array, but the official SDK's `MessageParam` type also doesn't include it — yet some Anthropic-compatible clients (notably Claude Code) inject system reminders mid-conversation for things like `[Request interrupted by user]`, environment stamps, and post-tool context. Rejecting those would break the most common real-world consumer. Hoisting preserves the content's reach to the model while satisfying the upstream constraint.
+- **Trade-off.** Loss of in-conversation temporal positioning for system content. The model sees all system content collapsed at the start rather than at the point the client intended. In practice this rarely matters because the semantic intent (a reminder, a date stamp, a re-injection) is the same regardless of where in the array it sits. Consumers wanting strict positional fidelity can intercept system messages on the Anthropic side before they reach the bridge.
+- **Revisit if.** OpenAI relaxes the leading-only requirement (it has not, as of 2026), or Anthropic ships a typed top-level mechanism for mid-conversation system reminders that lets us model them more faithfully on the OpenAI side.
 
 ### Public surface only via `src/index.ts`
 
