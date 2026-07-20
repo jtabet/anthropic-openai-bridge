@@ -36,7 +36,7 @@ jobs:
           bun-version: 1.3.11
 
       - name: Set up Node (required by npm publish for OIDC)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           # Node 24+ ships npm 11.5.1+, which the npm registry requires for
           # OIDC trusted publishing. Node 22 ships npm 10.x and produces a
