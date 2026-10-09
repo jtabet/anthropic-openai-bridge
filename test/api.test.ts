@@ -19,6 +19,7 @@ describe("public API surface", () => {
       "MalformedInputError",
       "UnsupportedFeatureError",
       "anthropicToOpenAIRequest",
+      "extractSafeguards",
       "frameEvent",
       "openAIToAnthropicResponse",
     ]);

@@ -20,6 +20,8 @@ export type {
 } from "./mappings.js";
 export { anthropicToOpenAIRequest } from "./request.js";
 export { openAIToAnthropicResponse } from "./response.js";
+export type { SafeguardResultsOptions } from "./safeguards.js";
+export { extractSafeguards } from "./safeguards.js";
 export { frameEvent } from "./sse.js";
 export {
   AnthropicStreamEncoder,
@@ -32,6 +34,7 @@ export type {
   AnthropicMessageResponse,
   AnthropicMessagesRequest,
   AnthropicResponseContentBlock,
+  AnthropicSafeguardResult,
   AnthropicStreamEvent,
   AnthropicTextBlock,
   AnthropicThinkingBlock,

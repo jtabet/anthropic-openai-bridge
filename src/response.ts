@@ -11,6 +11,7 @@ import { finishReasonToStopReason } from "./mappings.js";
 import type {
   AnthropicMessageResponse,
   AnthropicResponseContentBlock,
+  AnthropicSafeguardResult,
   OpenAIChatCompletion,
 } from "./types.js";
 
@@ -21,6 +22,10 @@ import type {
  * Only the first choice is used; OpenAI's `n>1` is not exposed by the
  * Anthropic API surface.
  *
+ * @param opts.safeguardResults — caller-authored Claude Code auto-mode
+ *   verdicts to attach verbatim as `safeguard_results`. The bridge never
+ *   authors verdicts; omit for the pre-0.4 shape exactly.
+ *
  * @throws {MalformedInputError} when the response is missing required fields.
  *
  * @example
@@ -28,7 +33,10 @@ import type {
  * const anthropicMsg = openAIToAnthropicResponse(openaiResp);
  * ```
  */
-export function openAIToAnthropicResponse(resp: OpenAIChatCompletion): AnthropicMessageResponse {
+export function openAIToAnthropicResponse(
+  resp: OpenAIChatCompletion,
+  opts?: { safeguardResults?: AnthropicSafeguardResult[] },
+): AnthropicMessageResponse {
   if (resp === null || typeof resp !== "object") {
     throw new MalformedInputError("response must be an object", "response");
   }
@@ -114,7 +122,7 @@ export function openAIToAnthropicResponse(resp: OpenAIChatCompletion): Anthropic
   const inputTokens = typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0;
   const outputTokens = typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0;
 
-  return {
+  const out: AnthropicMessageResponse = {
     id: resp.id,
     type: "message",
     role: "assistant",
@@ -124,4 +132,13 @@ export function openAIToAnthropicResponse(resp: OpenAIChatCompletion): Anthropic
     stop_sequence: null,
     usage: { input_tokens: inputTokens, output_tokens: outputTokens },
   };
+  // Attach caller-authored auto-mode verdicts verbatim — only when a
+  // non-empty array was supplied, so the pre-0.4 wire shape is untouched
+  // otherwise. (An empty array would be a legal-but-weird response; omitting
+  // it reads to Claude Code as "no server-side checks", which is the
+  // graceful degraded mode.)
+  if (opts?.safeguardResults !== undefined && opts.safeguardResults.length > 0) {
+    out.safeguard_results = opts.safeguardResults;
+  }
+  return out;
 }

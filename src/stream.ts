@@ -21,6 +21,7 @@ import { InternalInvariantError, MalformedInputError } from "./errors.js";
 import { type AnthropicStopReason, finishReasonToStopReason } from "./mappings.js";
 import { frameEvent } from "./sse.js";
 import type {
+  AnthropicSafeguardResult,
   AnthropicStreamEvent,
   OpenAIChatCompletionChunk,
   OpenAIToolCallDelta,
@@ -48,6 +49,13 @@ export type AnthropicStreamEncoderOptions = {
    * route the caller asked for.
    */
   modelOverride?: string;
+  /**
+   * Caller-authored Claude Code auto-mode verdicts to attach to the final
+   * `message_delta` event's delta (the captured native shape for streaming
+   * server-side classifier review). Attached verbatim; the encoder never
+   * authors verdicts. Omit for the pre-0.4 stream shape exactly.
+   */
+  safeguardResults?: AnthropicSafeguardResult[];
 };
 
 type ActiveBlock =
@@ -94,6 +102,7 @@ export class AnthropicStreamEncoder {
   private pendingToolCallMeta = new Map<number, { id?: string; name?: string }>();
   private stopReason: AnthropicStopReason | null = null;
   private completionTokens = 0;
+  private safeguardResults: AnthropicSafeguardResult[] | undefined;
 
   constructor(opts: AnthropicStreamEncoderOptions = {}) {
     if (opts.idGenerator) {
@@ -107,6 +116,7 @@ export class AnthropicStreamEncoder {
       this.messageId = `msg_${Date.now().toString(36)}${(idCounter++).toString(36)}`;
     }
     this.modelOverride = opts.modelOverride;
+    this.safeguardResults = opts.safeguardResults;
   }
 
   /**
@@ -231,13 +241,17 @@ export class AnthropicStreamEncoder {
       this.activeBlock = null;
     }
 
+    const delta: Extract<AnthropicStreamEvent, { type: "message_delta" }>["delta"] = {
+      stop_reason: this.stopReason ?? "end_turn",
+      stop_sequence: null,
+    };
+    if (this.safeguardResults !== undefined && this.safeguardResults.length > 0) {
+      delta.safeguard_results = this.safeguardResults;
+    }
     out.push(
       frameEvent({
         type: "message_delta",
-        delta: {
-          stop_reason: this.stopReason ?? "end_turn",
-          stop_sequence: null,
-        },
+        delta,
         usage: { output_tokens: this.completionTokens },
       }),
     );

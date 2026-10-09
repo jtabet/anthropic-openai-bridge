@@ -103,12 +103,20 @@ See [`examples/`](./examples) for full Express and Bun shims (~30 LoC each).
 | `stop_sequences`                   | ✅ Supported | → OpenAI `stop` |
 | `metadata.user_id`                 | ✅ Supported | → OpenAI `user` |
 | `is_error` on `tool_result`        | ✅ Supported | Content prefixed with `[error]` |
+| Auto-mode `safeguards` (Claude Code) | ⚠️ Passthrough | `extractSafeguards()` exposes the request envelope; `safeguard_results` attach verbatim via the translators' `safeguardResults` option. The bridge never authors verdicts — a consumer must evaluate them (native upstream or own classifier) or omit the field, which Claude Code reads as "server-side checks not enabled" and falls back gracefully |
 | `thinking` blocks                  | ⚠️ Dropped   | No OpenAI analogue — silently discarded |
 | `top_k`                            | ⚠️ Dropped   | No OpenAI analogue |
 | Image content blocks (user)        | ✅ Supported | `base64` & `url` sources → OpenAI `image_url` vision parts |
 | Image blocks (assistant/tool_result)| ❌ Rejected  | Throws `UnsupportedFeatureError` — OpenAI accepts images only in user content |
 | Citations / web search             | ❌ Rejected  | Not modeled in OpenAI Chat Completions |
 | `disable_parallel_tool_use`        | ✅ Supported | → OpenAI `parallel_tool_calls: false` |
+
+### Safeguards passthrough, never synthesis
+
+- **Decision.** Claude Code's auto-mode contract (`safeguards` request field, `safeguard_results` response field, beta `dangerous-tool-use-2026-09-03`) is supported as *extraction + verbatim attachment only*. `extractSafeguards()` reads the request envelope; `openAIToAnthropicResponse(..., { safeguardResults })` and the stream encoder's option attach caller-authored verdicts; the library itself never evaluates or fabricates a verdict.
+- **Why.** A translation library has no ability to judge whether a proposed `Bash(...)` call is dangerous — synthesizing `not_flagged` would make every bridge-turned-gateway silently rubber-stamp safety decisions. The honest behaviors are: (a) forward to a genuinely Anthropic-native upstream, (b) attach your own classifier's verdicts, or (c) omit the field — Claude Code reads "no verdict" as "server-side checks not enabled" and falls back to its own client-side classifier gracefully. Mangled or half-synthesized responses, not complete absence, are what produce the broken "gave no verdict" denial loops.
+- **Trade-off.** OpenAI-compatible backends alone can't get free server-side review; consumers who want it must run evaluation themselves (see Continuum's adapter design for a reference architecture).
+- **Revisit if.** Anthropic publishes an official `safeguards` schema (the current shape is capture-pinned, unofficial) or an OpenAI-compatible safety-review standard emerges.
 
 ## Examples
 

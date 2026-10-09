@@ -93,6 +93,29 @@ export type AnthropicMessagesRequest = {
   thinking?: { type: "enabled"; budget_tokens: number } | { type: "disabled" };
 };
 
+/**
+ * One entry of Claude Code's auto-mode `safeguard_results` (response side).
+ * The request-side envelope (`safeguards`) is pass-through-only and is read
+ * from the raw body via `extractSafeguards()` — it is deliberately NOT part
+ * of `AnthropicMessagesRequest` so strict request typing doesn't pretend a
+ * published schema exists. Captured shape (unofficial — see safeguards.ts):
+ *
+ *   { type: "dangerous_tool_use",
+ *     status: { type: "available" | "unavailable",
+ *               tool_uses?: { [toolUseId]: { type: "evaluated",
+ *                                            outcome: "not_flagged" | "flagged" } } } }
+ *
+ * The bridge never authors these; consumers attach them verbatim via
+ * `SafeguardResultsOptions`.
+ */
+export type AnthropicSafeguardResult = {
+  type: string;
+  status: {
+    type: string;
+    tool_uses?: Record<string, { type: string; outcome: string }>;
+  };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Anthropic Messages API — response side
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +141,8 @@ export type AnthropicMessageResponse = {
   stop_reason: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence" | null;
   stop_sequence: string | null;
   usage: AnthropicUsage;
+  /** Claude Code auto-mode verdicts (attached verbatim; never authored here). */
+  safeguard_results?: AnthropicSafeguardResult[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +178,12 @@ export type AnthropicMessageDeltaEvent = {
   delta: {
     stop_reason: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence" | null;
     stop_sequence: string | null;
+    /**
+     * Claude Code auto-mode verdicts ride inside the final message_delta's
+     * delta on streaming responses (captured native shape). Attached
+     * verbatim when the consumer supplied them; absent otherwise.
+     */
+    safeguard_results?: AnthropicSafeguardResult[];
   };
   usage: { output_tokens: number };
 };
